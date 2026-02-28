@@ -1,9 +1,9 @@
 # ddev-playwright <!-- omit in toc -->
 
 [![add-on registry](https://img.shields.io/badge/DDEV-Add--on_Registry-blue)](https://addons.ddev.com)
-[![tests](https://github.com/<owner>/ddev-playwright/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/<owner>/ddev-playwright/actions/workflows/tests.yml)
-[![last commit](https://img.shields.io/github/last-commit/<owner>/ddev-playwright)](https://github.com/<owner>/ddev-playwright/commits)
-[![release](https://img.shields.io/github/v/release/<owner>/ddev-playwright)](https://github.com/<owner>/ddev-playwright/releases)
+[![tests](https://github.com/ochorocho/ddev-playwright/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/<owner>/ddev-playwright/actions/workflows/tests.yml)
+[![last commit](https://img.shields.io/github/last-commit/<owner>/ddev-playwright)](https://github.com/ochorocho/ddev-playwright/commits)
+[![release](https://img.shields.io/github/v/release/ochorocho/ddev-playwright)](https://github.com/<owner>/ddev-playwright/releases)
 
 A DDEV add-on that provides [Playwright](https://playwright.dev/) end-to-end testing in an isolated Docker container. Uses the official Microsoft Playwright Docker image with all browsers and system dependencies pre-installed, and Playwright's native UI mode for interactive debugging — no VNC required.
 
