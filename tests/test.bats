@@ -115,7 +115,8 @@ health_checks() {
 teardown() {
   set -eu -o pipefail
   ddev delete -Oy ${PROJNAME} >/dev/null 2>&1
-  [ "${TESTDIR}" != "" ] && rm -rf ${TESTDIR}
+  # node_modules may be owned by root (created inside container), use sudo on Linux CI
+  [ "${TESTDIR}" != "" ] && (rm -rf "${TESTDIR}" 2>/dev/null || sudo rm -rf "${TESTDIR}")
 }
 
 @test "install from directory" {

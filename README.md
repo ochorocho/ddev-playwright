@@ -17,7 +17,7 @@ A DDEV add-on that provides [Playwright](https://playwright.dev/) end-to-end tes
 ## Installation
 
 ```bash
-ddev add-on get <owner>/ddev-playwright
+ddev add-on get ochorocho/ddev-playwright
 ddev restart
 ```
 
