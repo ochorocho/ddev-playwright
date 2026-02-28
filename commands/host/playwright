@@ -74,6 +74,13 @@ check_playwright_installed() {
     fi
 }
 
+# Kill Playwright processes in the container and exit cleanly
+cleanup_ui() {
+    echo ""
+    ddev exec -s playwright bash -c "pkill -f 'playwright.*--ui' 2>/dev/null; exit 0" 2>/dev/null || true
+    exit 0
+}
+
 # Launch Playwright UI mode in the browser (foreground, Ctrl+C to stop)
 launch_ui_mode() {
     check_playwright_installed
@@ -84,6 +91,9 @@ launch_ui_mode() {
     # Kill any existing UI mode process (ignore errors from pkill/ddev exec)
     ddev exec -s playwright bash -c "pkill -f 'playwright.*--ui' 2>/dev/null; exit 0" 2>/dev/null || true
 
+    # Trap SIGINT/SIGTERM to kill the container process on Ctrl+C
+    trap cleanup_ui INT TERM
+
     echo -e "${GREEN}Playwright UI mode is running at:${NC}"
     echo "  ${DDEV_PRIMARY_URL}:${ui_port}"
     echo ""
@@ -92,9 +102,17 @@ launch_ui_mode() {
     # Open the browser after a short delay (in the background)
     (sleep 3 && ddev launch ":${ui_port}") &
 
-    # Run UI mode in the foreground — Ctrl+C will stop it
-    # Suppress Playwright output (garbled escape sequences and internal 0.0.0.0 address)
-    ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright npx playwright test --ui --ui-host=0.0.0.0 --ui-port=8077 > /dev/null 2>&1
+    # Run UI mode in the foreground — output suppressed (garbled escape sequences)
+    # The trap above handles Ctrl+C since signal won't propagate through redirection
+    ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright npx playwright test --ui --ui-host=0.0.0.0 --ui-port=8077 > /dev/null 2>&1 &
+    wait $!
+}
+
+# Kill report server in the container and exit cleanly
+cleanup_report() {
+    echo ""
+    ddev exec -s playwright bash -c "pkill -f 'playwright.*show-report' 2>/dev/null; exit 0" 2>/dev/null || true
+    exit 0
 }
 
 # Show the HTML report in the browser (foreground, Ctrl+C to stop)
@@ -107,6 +125,9 @@ show_report() {
     # Kill any existing report server (ignore errors from pkill/ddev exec)
     ddev exec -s playwright bash -c "pkill -f 'playwright.*show-report' 2>/dev/null; exit 0" 2>/dev/null || true
 
+    # Trap SIGINT/SIGTERM to kill the container process on Ctrl+C
+    trap cleanup_report INT TERM
+
     echo -e "${GREEN}Playwright report is available at:${NC}"
     echo "  ${DDEV_PRIMARY_URL}:${report_port}"
     echo ""
@@ -115,9 +136,10 @@ show_report() {
     # Open the browser after a short delay (in the background)
     (sleep 2 && ddev launch ":${report_port}") &
 
-    # Run report server in the foreground — Ctrl+C will stop it
-    # Suppress Playwright output (garbled escape sequences)
-    ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright npx playwright show-report --host=0.0.0.0 --port=9323 > /dev/null 2>&1
+    # Run report server in the foreground — output suppressed (garbled escape sequences)
+    # The trap above handles Ctrl+C since signal won't propagate through redirection
+    ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright npx playwright show-report --host=0.0.0.0 --port=9323 > /dev/null 2>&1 &
+    wait $!
 }
 
 # Show help text
@@ -171,6 +193,15 @@ case "${CMD}" in
         ;;
     --help|-h|"")
         show_help
+        ;;
+    codegen)
+        echo -e "${RED}Error:${NC} codegen requires a visible browser GUI and cannot run inside the headless Playwright container."
+        echo ""
+        echo "Run codegen locally on your host machine instead:"
+        echo "  npx playwright codegen"
+        echo ""
+        echo "See: https://playwright.dev/docs/codegen-intro"
+        exit 1
         ;;
     *)
         check_playwright_installed
