@@ -129,7 +129,6 @@ show_help() {
     echo "  ddev playwright test [options]         Run Playwright tests"
     echo "  ddev playwright browser                Launch Playwright UI mode in your browser"
     echo "  ddev playwright show-report            Open the last HTML test report"
-    echo "  ddev playwright codegen [url]          Generate tests interactively"
     echo "  ddev playwright --version              Show Playwright version"
     echo "  ddev playwright install                Install browsers (usually not needed)"
     echo ""

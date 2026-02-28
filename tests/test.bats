@@ -100,6 +100,25 @@ health_checks() {
   echo "Kill UI mode after test" >&3
   ddev exec -s playwright bash -c "pkill -f 'playwright.*--ui' 2>/dev/null; exit 0" 2>/dev/null || true
 
+  echo "Check show-report starts report server" >&3
+  # Generate an HTML report first (test already ran above, re-run with html reporter)
+  ddev exec -s playwright bash -c "cd /var/www/html && npx playwright test --reporter=html" || true
+  # Start report server in background
+  ddev exec -s playwright bash -c "setsid npx playwright show-report --host=0.0.0.0 --port=9323 > /tmp/playwright-report.log 2>&1 < /dev/null &"
+  local attempts2=0
+  while ! ddev exec -s playwright curl -s -o /dev/null -w '%{http_code}' http://localhost:9323 2>/dev/null | grep -qE "^(200|302)$"; do
+    attempts2=$((attempts2 + 1))
+    if [ "$attempts2" -ge 15 ]; then
+      echo "Report server did not start within 15 seconds" >&3
+      ddev exec -s playwright cat /tmp/playwright-report.log >&3 || true
+      false
+    fi
+    sleep 1
+  done
+
+  echo "Kill report server after test" >&3
+  ddev exec -s playwright bash -c "pkill -f 'playwright.*show-report' 2>/dev/null; exit 0" 2>/dev/null || true
+
   echo "Remove addon - verify files are cleaned up" >&3
   expected_files=("docker-compose.playwright.yaml" "commands/host/playwright")
   for file in "${expected_files[@]}"; do

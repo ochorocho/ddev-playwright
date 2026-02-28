@@ -47,7 +47,6 @@ If you use a different version, update the Docker image accordingly (see [Config
 | `ddev playwright test --retries=2` | Retry failed tests up to 2 times |
 | `ddev playwright browser` | Launch the interactive Playwright UI mode |
 | `ddev playwright show-report` | Open the last HTML test report in your browser |
-| `ddev playwright codegen [url]` | Generate test code interactively |
 | `ddev playwright --version` | Show the installed Playwright version |
 | `ddev playwright install` | Install browser binaries (usually not needed) |
 | `ddev playwright --dir=<path> test` | Run tests from a different directory |
