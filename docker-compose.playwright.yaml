@@ -1,0 +1,26 @@
+#ddev-generated
+services:
+  playwright:
+    container_name: ddev-${DDEV_SITENAME}-playwright
+    hostname: ${DDEV_SITENAME}-playwright
+    image: ${PLAYWRIGHT_DOCKER_IMAGE:-mcr.microsoft.com/playwright:v1.50.0-noble}
+    working_dir: /var/www/html/${PLAYWRIGHT_TEST_DIR:-.}
+    command: tail -f /dev/null
+    expose:
+      - "8077"
+      - "9323"
+    environment:
+      - VIRTUAL_HOST=$DDEV_HOSTNAME
+      - HTTP_EXPOSE=8077:8077,9323:9323
+      - HTTPS_EXPOSE=8078:8077,9324:9323
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME}
+      com.ddev.approot: $DDEV_APPROOT
+    volumes:
+      - ".:/mnt/ddev_config"
+      - "ddev-global-cache:/mnt/ddev-global-cache"
+      - "../:/var/www/html"
+
+  web:
+    links:
+      - playwright

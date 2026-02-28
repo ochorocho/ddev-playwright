@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+#ddev-generated
+
+## Description: Run Playwright commands in an isolated Playwright container
+## Usage: playwright [command] [options]
+## Example: ddev playwright test\nddev playwright test --project=chromium\nddev playwright browser\nddev playwright --version
+
+set -eo pipefail
+
+# Parse --dir=<path> flag to override the working directory for this invocation
+# This allows targeting different Playwright installations without changing .env.playwright
+ARGS=()
+CUSTOM_DIR=""
+for arg in "$@"; do
+    case "$arg" in
+        --dir=*)
+            CUSTOM_DIR="${arg#--dir=}"
+            ;;
+        *)
+            ARGS+=("$arg")
+            ;;
+    esac
+done
+set -- "${ARGS[@]}"
+
+CMD="${1:-}"
+
+# Resolve the Playwright working directory inside the container
+# Priority: --dir flag > PLAYWRIGHT_TEST_DIR env var > project root
+if [ -n "${CUSTOM_DIR}" ]; then
+    PLAYWRIGHT_WORK_DIR="/var/www/html/${CUSTOM_DIR}"
+else
+    PLAYWRIGHT_WORK_DIR="/var/www/html/${PLAYWRIGHT_TEST_DIR:-.}"
+fi
+
+# Color output helpers
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Get the UI mode port based on protocol
+get_ui_port() {
+    if [ "${DDEV_PRIMARY_URL%://*}" = "http" ] || [ -n "${GITPOD_WORKSPACE_ID:-}" ] || [ "${CODESPACES:-}" = "true" ]; then
+        echo "8077"
+    else
+        echo "8078"
+    fi
+}
+
+# Get the report port based on protocol
+get_report_port() {
+    if [ "${DDEV_PRIMARY_URL%://*}" = "http" ] || [ -n "${GITPOD_WORKSPACE_ID:-}" ] || [ "${CODESPACES:-}" = "true" ]; then
+        echo "9323"
+    else
+        echo "9324"
+    fi
+}
+
+# Check if @playwright/test is installed in the project
+check_playwright_installed() {
+    local container_name="ddev-${DDEV_SITENAME}-playwright"
+    if ! docker exec "${container_name}" test -d "${PLAYWRIGHT_WORK_DIR}/node_modules/@playwright/test" 2>/dev/null; then
+        echo -e "${RED}Error:${NC} @playwright/test is not installed in your project."
+        echo ""
+        echo "Install it with:"
+        echo "  npm install -D @playwright/test"
+        echo ""
+        echo "Make sure the Docker image version matches your @playwright/test version."
+        echo "Check your version with: ddev playwright --version"
+        echo "Set the Docker image with:"
+        echo "  ddev dotenv set .ddev/.env.playwright --playwright-docker-image=\"mcr.microsoft.com/playwright:v<VERSION>-noble\""
+        echo "  ddev restart"
+        exit 1
+    fi
+}
+
+# Launch Playwright UI mode in the browser
+launch_ui_mode() {
+    check_playwright_installed
+
+    local ui_port
+    ui_port=$(get_ui_port)
+
+    echo "Starting Playwright UI mode..."
+
+    # Kill any existing UI mode process (ignore errors from pkill/ddev exec)
+    ddev exec -s playwright bash -c "pkill -f 'playwright.*--ui' 2>/dev/null; exit 0" 2>/dev/null || true
+
+    # Start UI mode in the background using docker exec in detached mode
+    # ddev exec doesn't support long-running background processes, so we use docker exec -d
+    local container_name="ddev-${DDEV_SITENAME}-playwright"
+    docker exec -d "${container_name}" bash -c "cd ${PLAYWRIGHT_WORK_DIR} && npx playwright test --ui --ui-host=0.0.0.0 --ui-port=8077 > /tmp/playwright-ui.log 2>&1"
+
+    # Wait for the UI to become available
+    echo "Waiting for UI mode to start..."
+    local attempts=0
+    while ! docker exec "${container_name}" curl -s -o /dev/null -w '%{http_code}' http://localhost:8077 2>/dev/null | grep -qE "^(200|302)$"; do
+        attempts=$((attempts + 1))
+        if [ "$attempts" -ge 30 ]; then
+            echo -e "${RED}Error:${NC} UI mode did not start within 30 seconds."
+            echo "Check logs with: ddev exec -s playwright cat /tmp/playwright-ui.log"
+            exit 1
+        fi
+        sleep 1
+    done
+
+    echo -e "${GREEN}Playwright UI mode is running.${NC}"
+    ddev launch ":${ui_port}"
+}
+
+# Show the HTML report in the browser
+show_report() {
+    check_playwright_installed
+
+    local report_port
+    report_port=$(get_report_port)
+
+    # Kill any existing report server (ignore errors from pkill/ddev exec)
+    ddev exec -s playwright bash -c "pkill -f 'playwright.*show-report' 2>/dev/null; exit 0" 2>/dev/null || true
+
+    echo "Starting Playwright report server..."
+
+    # Start report server in the background using docker exec in detached mode
+    local container_name="ddev-${DDEV_SITENAME}-playwright"
+    docker exec -d "${container_name}" bash -c "cd ${PLAYWRIGHT_WORK_DIR} && npx playwright show-report --host=0.0.0.0 --port=9323 > /tmp/playwright-report.log 2>&1"
+
+    # Wait for the report server to become available
+    local attempts=0
+    while ! docker exec "${container_name}" curl -s -o /dev/null -w '%{http_code}' http://localhost:9323 2>/dev/null | grep -qE "^(200|302)$"; do
+        attempts=$((attempts + 1))
+        if [ "$attempts" -ge 15 ]; then
+            echo -e "${RED}Error:${NC} Report server did not start within 15 seconds."
+            echo "Make sure you have run tests first to generate a report."
+            echo "Check logs with: ddev exec -s playwright cat /tmp/playwright-report.log"
+            exit 1
+        fi
+        sleep 1
+    done
+
+    echo -e "${GREEN}Playwright report is available.${NC}"
+    ddev launch ":${report_port}"
+}
+
+# Show help text
+show_help() {
+    echo -e "${BOLD}Playwright for DDEV${NC}"
+    echo "===================="
+    echo ""
+    echo -e "${BOLD}Usage:${NC}"
+    echo "  ddev playwright test [options]         Run Playwright tests"
+    echo "  ddev playwright browser                Launch Playwright UI mode in your browser"
+    echo "  ddev playwright show-report            Open the last HTML test report"
+    echo "  ddev playwright codegen [url]          Generate tests interactively"
+    echo "  ddev playwright --version              Show Playwright version"
+    echo "  ddev playwright install                Install browsers (usually not needed)"
+    echo ""
+    echo -e "${BOLD}Options:${NC}"
+    echo "  --dir=<path>    Override the Playwright working directory for this command."
+    echo "                  Path is relative to the project root (e.g., --dir=test/E2E)."
+    echo ""
+    echo -e "${BOLD}Examples:${NC}"
+    echo "  ddev playwright test                             Run all tests headlessly"
+    echo "  ddev playwright test --project=chromium          Run tests in Chromium only"
+    echo "  ddev playwright test -g \"login\"                   Run tests matching pattern"
+    echo "  ddev playwright test --reporter=html             Generate HTML report"
+    echo "  ddev playwright test --workers=4                 Run with 4 parallel workers"
+    echo "  ddev playwright test --retries=2                 Retry failed tests"
+    echo "  ddev playwright --dir=test/E2E test              Run tests from a different directory"
+    echo "  ddev playwright browser                          Start interactive UI mode"
+    echo "  ddev playwright show-report                      View last test report"
+    echo ""
+    echo -e "${BOLD}Configuration:${NC}"
+    echo "  Set test directory (if Playwright is not in project root):"
+    echo "    ddev dotenv set .ddev/.env.playwright --playwright-test-dir=\"test/Playwright\""
+    echo "    ddev restart"
+    echo ""
+    echo "  Change Docker image version:"
+    echo "    ddev dotenv set .ddev/.env.playwright --playwright-docker-image=\"mcr.microsoft.com/playwright:v1.50.0-noble\""
+    echo "    ddev restart"
+    echo ""
+    echo -e "${BOLD}Service Info:${NC}"
+    echo "  View service status:  ddev describe"
+    echo "  View container logs:  ddev logs -s playwright"
+    echo "  Shell into container: ddev ssh -s playwright"
+}
+
+case "${CMD}" in
+    browser)
+        launch_ui_mode
+        ;;
+    show-report)
+        show_report
+        ;;
+    --help|-h|"")
+        show_help
+        ;;
+    *)
+        check_playwright_installed
+        # Pass all arguments through to npx playwright in the container
+        # Use docker exec -w to respect runtime --dir override
+        CONTAINER_NAME="ddev-${DDEV_SITENAME}-playwright"
+        if [ -t 0 ]; then
+            docker exec -it -w "${PLAYWRIGHT_WORK_DIR}" "${CONTAINER_NAME}" npx playwright "$@"
+        else
+            docker exec -w "${PLAYWRIGHT_WORK_DIR}" "${CONTAINER_NAME}" npx playwright "$@"
+        fi
+        ;;
+esac
