@@ -59,8 +59,7 @@ get_report_port() {
 
 # Check if @playwright/test is installed in the project
 check_playwright_installed() {
-    local container_name="ddev-${DDEV_SITENAME}-playwright"
-    if ! docker exec "${container_name}" test -d "${PLAYWRIGHT_WORK_DIR}/node_modules/@playwright/test" 2>/dev/null; then
+    if ! ddev exec -s playwright test -d "${PLAYWRIGHT_WORK_DIR}/node_modules/@playwright/test" 2>/dev/null; then
         echo -e "${RED}Error:${NC} @playwright/test is not installed in your project."
         echo ""
         echo "Install it with:"
@@ -75,41 +74,30 @@ check_playwright_installed() {
     fi
 }
 
-# Launch Playwright UI mode in the browser
+# Launch Playwright UI mode in the browser (foreground, Ctrl+C to stop)
 launch_ui_mode() {
     check_playwright_installed
 
     local ui_port
     ui_port=$(get_ui_port)
 
-    echo "Starting Playwright UI mode..."
-
     # Kill any existing UI mode process (ignore errors from pkill/ddev exec)
     ddev exec -s playwright bash -c "pkill -f 'playwright.*--ui' 2>/dev/null; exit 0" 2>/dev/null || true
 
-    # Start UI mode in the background using docker exec in detached mode
-    # ddev exec doesn't support long-running background processes, so we use docker exec -d
-    local container_name="ddev-${DDEV_SITENAME}-playwright"
-    docker exec -d "${container_name}" bash -c "cd ${PLAYWRIGHT_WORK_DIR} && npx playwright test --ui --ui-host=0.0.0.0 --ui-port=8077 > /tmp/playwright-ui.log 2>&1"
+    echo -e "${GREEN}Playwright UI mode is running at:${NC}"
+    echo "  ${DDEV_PRIMARY_URL}:${ui_port}"
+    echo ""
+    echo "Press Ctrl+C to stop."
 
-    # Wait for the UI to become available
-    echo "Waiting for UI mode to start..."
-    local attempts=0
-    while ! docker exec "${container_name}" curl -s -o /dev/null -w '%{http_code}' http://localhost:8077 2>/dev/null | grep -qE "^(200|302)$"; do
-        attempts=$((attempts + 1))
-        if [ "$attempts" -ge 30 ]; then
-            echo -e "${RED}Error:${NC} UI mode did not start within 30 seconds."
-            echo "Check logs with: ddev exec -s playwright cat /tmp/playwright-ui.log"
-            exit 1
-        fi
-        sleep 1
-    done
+    # Open the browser after a short delay (in the background)
+    (sleep 3 && ddev launch ":${ui_port}") &
 
-    echo -e "${GREEN}Playwright UI mode is running.${NC}"
-    ddev launch ":${ui_port}"
+    # Run UI mode in the foreground — Ctrl+C will stop it
+    # Suppress Playwright output (garbled escape sequences and internal 0.0.0.0 address)
+    ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright npx playwright test --ui --ui-host=0.0.0.0 --ui-port=8077 > /dev/null 2>&1
 }
 
-# Show the HTML report in the browser
+# Show the HTML report in the browser (foreground, Ctrl+C to stop)
 show_report() {
     check_playwright_installed
 
@@ -119,27 +107,17 @@ show_report() {
     # Kill any existing report server (ignore errors from pkill/ddev exec)
     ddev exec -s playwright bash -c "pkill -f 'playwright.*show-report' 2>/dev/null; exit 0" 2>/dev/null || true
 
-    echo "Starting Playwright report server..."
+    echo -e "${GREEN}Playwright report is available at:${NC}"
+    echo "  ${DDEV_PRIMARY_URL}:${report_port}"
+    echo ""
+    echo "Press Ctrl+C to stop."
 
-    # Start report server in the background using docker exec in detached mode
-    local container_name="ddev-${DDEV_SITENAME}-playwright"
-    docker exec -d "${container_name}" bash -c "cd ${PLAYWRIGHT_WORK_DIR} && npx playwright show-report --host=0.0.0.0 --port=9323 > /tmp/playwright-report.log 2>&1"
+    # Open the browser after a short delay (in the background)
+    (sleep 2 && ddev launch ":${report_port}") &
 
-    # Wait for the report server to become available
-    local attempts=0
-    while ! docker exec "${container_name}" curl -s -o /dev/null -w '%{http_code}' http://localhost:9323 2>/dev/null | grep -qE "^(200|302)$"; do
-        attempts=$((attempts + 1))
-        if [ "$attempts" -ge 15 ]; then
-            echo -e "${RED}Error:${NC} Report server did not start within 15 seconds."
-            echo "Make sure you have run tests first to generate a report."
-            echo "Check logs with: ddev exec -s playwright cat /tmp/playwright-report.log"
-            exit 1
-        fi
-        sleep 1
-    done
-
-    echo -e "${GREEN}Playwright report is available.${NC}"
-    ddev launch ":${report_port}"
+    # Run report server in the foreground — Ctrl+C will stop it
+    # Suppress Playwright output (garbled escape sequences)
+    ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright npx playwright show-report --host=0.0.0.0 --port=9323 > /dev/null 2>&1
 }
 
 # Show help text
@@ -198,12 +176,7 @@ case "${CMD}" in
     *)
         check_playwright_installed
         # Pass all arguments through to npx playwright in the container
-        # Use docker exec -w to respect runtime --dir override
-        CONTAINER_NAME="ddev-${DDEV_SITENAME}-playwright"
-        if [ -t 0 ]; then
-            docker exec -it -w "${PLAYWRIGHT_WORK_DIR}" "${CONTAINER_NAME}" npx playwright "$@"
-        else
-            docker exec -w "${PLAYWRIGHT_WORK_DIR}" "${CONTAINER_NAME}" npx playwright "$@"
-        fi
+        # ddev exec -d sets working directory (not detached mode)
+        ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright npx playwright "$@"
         ;;
 esac

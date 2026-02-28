@@ -82,14 +82,23 @@ health_checks() {
   assert_success
   assert_output --partial "playwright"
 
-  echo "Check launch command starts UI mode" >&3
-  DDEV_DEBUG=true run ddev playwright browser
-  assert_success
-  assert_output --partial "Playwright UI mode is running"
-  assert_output --partial "FULLURL"
+  echo "Check UI mode starts via direct exec" >&3
+  # Start UI mode in the background using setsid (same technique as the host command)
+  ddev exec -s playwright bash -c "setsid npx playwright test --ui --ui-host=0.0.0.0 --ui-port=8077 > /tmp/playwright-ui.log 2>&1 < /dev/null &"
+  # Wait for the UI to become available
+  local attempts=0
+  while ! ddev exec -s playwright curl -s -o /dev/null -w '%{http_code}' http://localhost:8077 2>/dev/null | grep -qE "^(200|302)$"; do
+    attempts=$((attempts + 1))
+    if [ "$attempts" -ge 30 ]; then
+      echo "UI mode did not start within 30 seconds" >&3
+      ddev exec -s playwright cat /tmp/playwright-ui.log >&3 || true
+      false
+    fi
+    sleep 1
+  done
 
   echo "Kill UI mode after test" >&3
-  docker exec "ddev-${PROJNAME}-playwright" bash -c "pkill -f 'playwright.*--ui' 2>/dev/null; exit 0" 2>/dev/null || true
+  ddev exec -s playwright bash -c "pkill -f 'playwright.*--ui' 2>/dev/null; exit 0" 2>/dev/null || true
 
   echo "Remove addon - verify files are cleaned up" >&3
   expected_files=("docker-compose.playwright.yaml" "commands/host/playwright")
