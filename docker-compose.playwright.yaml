@@ -11,6 +11,7 @@ services:
       - "9323"
     environment:
       - VIRTUAL_HOST=$DDEV_HOSTNAME
+      - DDEV_SITENAME=${DDEV_SITENAME}
       - HTTP_EXPOSE=8077:8077,9323:9323
       - HTTPS_EXPOSE=8078:8077,9324:9323
     labels:
