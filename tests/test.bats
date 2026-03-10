@@ -18,7 +18,7 @@ setup() {
   bats_require_minimum_version 1.5.0
 
   # Override this variable for your add-on:
-  export GITHUB_REPO=${GITHUB_REPO:-ddev/ddev-playwright}
+  export GITHUB_REPO=${GITHUB_REPO:-ochorocho/ddev-playwright}
 
   TEST_BREW_PREFIX="$(brew --prefix 2>/dev/null || true)"
   export BATS_LIB_PATH="${BATS_LIB_PATH:-}:${TEST_BREW_PREFIX}/lib:/usr/lib/bats"
