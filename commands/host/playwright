@@ -7,6 +7,16 @@
 
 set -eo pipefail
 
+# Load .ddev/.env.playwright so PLAYWRIGHT_TEST_DIR (and any future vars set
+# via `ddev dotenv set .ddev/.env.playwright ...`) are visible to this host
+# script. DDEV only injects these into docker-compose interpolation and the
+# named service container, not into host commands.
+ENV_FILE="${DDEV_APPROOT}/.ddev/.env.playwright"
+if [ -f "${ENV_FILE}" ]; then
+    # shellcheck disable=SC1090
+    . "${ENV_FILE}"
+fi
+
 # Parse --dir=<path> flag to override the working directory for this invocation
 # This allows targeting different Playwright installations without changing .env.playwright
 ARGS=()

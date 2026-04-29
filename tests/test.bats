@@ -148,6 +148,73 @@ teardown() {
   health_checks
 }
 
+# Replace the flat-layout fixture copied by setup() with the nested fixture
+# under test/Playwright/.
+use_subdir_fixture() {
+  rm -f "${TESTDIR}/package.json" "${TESTDIR}/playwright.config.ts"
+  rm -rf "${TESTDIR}/tests"
+  cp -r "${DIR}/tests/testdata-subdir/." "${TESTDIR}/"
+}
+
+@test "PLAYWRIGHT_TEST_DIR from .env.playwright is respected for subdirectory installs" {
+  set -eu -o pipefail
+  use_subdir_fixture
+
+  echo "# ddev add-on get ${DIR} with project ${PROJNAME} in $(pwd)" >&3
+  run ddev add-on get "${DIR}"
+  assert_success
+
+  echo "# Configure PLAYWRIGHT_TEST_DIR via ddev dotenv set" >&3
+  run ddev dotenv set .ddev/.env.playwright --playwright-test-dir=test/Playwright
+  assert_success
+  assert_file_exist "${TESTDIR}/.ddev/.env.playwright"
+
+  run ddev restart -y
+  assert_success
+
+  echo "# Install npm deps inside the playwright container (working_dir is the subdir)" >&3
+  run ddev exec -s playwright npm install
+  assert_success
+
+  echo "# ddev playwright --version must resolve @playwright/test under the subdir" >&3
+  run ddev playwright --version
+  assert_success
+
+  echo "# ddev playwright test must execute from the configured subdir and pass" >&3
+  run ddev playwright test
+  assert_success
+  assert_output --partial "passed"
+}
+
+@test "--dir flag overrides project root without .env.playwright" {
+  set -eu -o pipefail
+  use_subdir_fixture
+
+  echo "# ddev add-on get ${DIR} with project ${PROJNAME} in $(pwd)" >&3
+  run ddev add-on get "${DIR}"
+  assert_success
+  run ddev restart -y
+  assert_success
+
+  echo "# Install npm deps in the subdir manually (container working_dir defaults to project root)" >&3
+  run ddev exec -s playwright bash -c 'cd /var/www/html/test/Playwright && npm install'
+  assert_success
+
+  echo "# Without --dir or PLAYWRIGHT_TEST_DIR, command must fail with the @playwright/test missing error" >&3
+  run ddev playwright --version
+  assert_failure
+  assert_output --partial "@playwright/test is not installed"
+
+  echo "# --dir=test/Playwright must take effect for --version" >&3
+  run ddev playwright --dir=test/Playwright --version
+  assert_success
+
+  echo "# --dir=test/Playwright must take effect for test and pass" >&3
+  run ddev playwright --dir=test/Playwright test
+  assert_success
+  assert_output --partial "passed"
+}
+
 # bats test_tags=release
 @test "install from release" {
   set -eu -o pipefail
