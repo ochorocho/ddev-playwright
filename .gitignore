@@ -1,4 +1,3 @@
 /.idea
 /.ddev
 node_modules/
-tests/testdata-subdir/
