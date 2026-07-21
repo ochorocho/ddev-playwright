@@ -3,7 +3,7 @@ services:
   playwright:
     container_name: ddev-${DDEV_SITENAME}-playwright
     hostname: ${DDEV_SITENAME}-playwright
-    image: ${PLAYWRIGHT_DOCKER_IMAGE:-mcr.microsoft.com/playwright:v1.50.0-noble}
+    image: ${PLAYWRIGHT_DOCKER_IMAGE:-mcr.microsoft.com/playwright:v1.59.1-noble}
     working_dir: /var/www/html/${PLAYWRIGHT_TEST_DIR:-.}
     command: tail -f /dev/null
     expose:
