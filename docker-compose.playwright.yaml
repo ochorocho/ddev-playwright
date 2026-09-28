@@ -6,6 +6,7 @@ services:
     image: ${PLAYWRIGHT_DOCKER_IMAGE:-mcr.microsoft.com/playwright:v1.59.1-noble}
     working_dir: /var/www/html/${PLAYWRIGHT_TEST_DIR:-.}
     command: tail -f /dev/null
+    user: "${DDEV_UID}:${DDEV_GID}"
     expose:
       - "8077"
       - "9323"
