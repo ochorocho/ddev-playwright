@@ -21,10 +21,14 @@ fi
 # This allows targeting different Playwright installations without changing .env.playwright
 ARGS=()
 CUSTOM_DIR=""
+SLOW_MO=""
 for arg in "$@"; do
     case "$arg" in
         --dir=*)
             CUSTOM_DIR="${arg#--dir=}"
+            ;;
+        --slow-mo=*)
+            SLOW_MO="${arg#--slow-mo=}"
             ;;
         *)
             ARGS+=("$arg")
@@ -32,6 +36,15 @@ for arg in "$@"; do
     esac
 done
 set -- "${ARGS[@]}"
+
+# --slow-mo=<ms> is forwarded as PLAYWRIGHT_SLOWMO; the project's playwright
+# config must read it (launchOptions.slowMo). Empty value = slowMo 0.
+if [ -n "${SLOW_MO}" ] && ! [[ "${SLOW_MO}" =~ ^[0-9]+$ ]]; then
+    echo -e "\033[0;31mError:\033[0m --slow-mo expects a non-negative integer (milliseconds), got '${SLOW_MO}'."
+    exit 1
+fi
+# `ddev exec` has no -e flag, so set the variable via env(1) inside the container
+ENV_PREFIX=(env "PLAYWRIGHT_SLOWMO=${SLOW_MO}")
 
 CMD="${1:-}"
 
@@ -114,7 +127,7 @@ launch_ui_mode() {
 
     # Run UI mode in the foreground — output suppressed (garbled escape sequences)
     # The trap above handles Ctrl+C since signal won't propagate through redirection
-    ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright npx playwright test --ui --ui-host=0.0.0.0 --ui-port=8077 > /dev/null 2>&1 &
+    ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright "${ENV_PREFIX[@]}" npx playwright test --ui --ui-host=0.0.0.0 --ui-port=8077 > /dev/null 2>&1 &
     wait $!
 }
 
@@ -167,6 +180,7 @@ show_help() {
     echo -e "${BOLD}Options:${NC}"
     echo "  --dir=<path>    Override the Playwright working directory for this command."
     echo "                  Path is relative to the project root (e.g., --dir=test/E2E)."
+    echo "  --slow-mo=<ms>  Slow down each Playwright operation (see Configuration below)."
     echo ""
     echo -e "${BOLD}Examples:${NC}"
     echo "  ddev playwright test                             Run all tests headlessly"
@@ -176,10 +190,14 @@ show_help() {
     echo "  ddev playwright test --workers=4                 Run with 4 parallel workers"
     echo "  ddev playwright test --retries=2                 Retry failed tests"
     echo "  ddev playwright --dir=test/E2E test              Run tests from a different directory"
+    echo "  ddev playwright test --slow-mo=500               Delay each action by 500ms"
     echo "  ddev playwright browser                          Start interactive UI mode"
     echo "  ddev playwright show-report                      View last test report"
     echo ""
     echo -e "${BOLD}Configuration:${NC}"
+    echo "  --slow-mo sets PLAYWRIGHT_SLOWMO in the container. Add to playwright.config.ts:"
+    echo "    use: { launchOptions: { slowMo: Number(process.env.PLAYWRIGHT_SLOWMO ?? 0) } }"
+    echo ""
     echo "  Set test directory (if Playwright is not in project root):"
     echo "    ddev dotenv set .ddev/.env.playwright --playwright-test-dir=\"test/Playwright\""
     echo "    ddev restart"
@@ -217,6 +235,6 @@ case "${CMD}" in
         check_playwright_installed
         # Pass all arguments through to npx playwright in the container
         # ddev exec -d sets working directory (not detached mode)
-        ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright npx playwright "$@"
+        ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright "${ENV_PREFIX[@]}" npx playwright "$@"
         ;;
 esac

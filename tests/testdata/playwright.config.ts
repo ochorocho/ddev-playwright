@@ -9,6 +9,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://web',
     trace: 'on-first-retry',
+    launchOptions: { slowMo: Number(process.env.PLAYWRIGHT_SLOWMO ?? 0) },
   },
   projects: [
     {
