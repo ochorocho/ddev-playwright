@@ -215,6 +215,24 @@ use_subdir_fixture() {
   assert_output --partial "passed"
 }
 
+@test "--slow-mo flag is forwarded as PLAYWRIGHT_SLOWMO" {
+  set -eu -o pipefail
+  run ddev add-on get "${DIR}"
+  assert_success
+  run ddev restart -y
+  assert_success
+  run ddev exec -s playwright npm install
+  assert_success
+
+  run ddev playwright --slow-mo=abc test
+  assert_failure
+  assert_output --partial "--slow-mo expects a non-negative integer"
+
+  run ddev playwright --slow-mo=50 test -g "slowmo env"
+  assert_success
+  assert_output --partial "SLOWMO=50"
+}
+
 # bats test_tags=release
 @test "install from release" {
   set -eu -o pipefail
