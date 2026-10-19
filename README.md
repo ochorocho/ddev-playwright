@@ -142,6 +142,45 @@ ddev playwright --slow-mo=500 browser
 
 The container is headless, so watch the slowed run in UI mode or via video/trace.
 
+### Follow a Test Like a Video
+
+`ddev playwright browser` opens UI mode, paced at 250 ms per action by default (override with `--slow-mo=<ms>`, `--slow-mo=0` for full speed). Extra arguments narrow what is loaded:
+
+```bash
+ddev playwright browser tests/login.spec.ts
+ddev playwright browser -g "login" --project=chromium
+```
+
+Select a test and press play: the action list and DOM snapshot update live, and hovering the timeline scrubs through the run. Set `workers: 1` in your config to run one test at a time. The pacing needs the `slowMo` config snippet above.
+
+### Watch Helper
+
+The add-on installs `.ddev/playwright/ddev-playwright.ts`. It replaces the manual `slowMo` snippet and adds highlighted actions, captions and a recording preset (needs Playwright 1.59+ for highlights and captions).
+
+```ts
+// playwright.config.ts
+import { defineConfig } from '@playwright/test';
+import { withDdev } from './.ddev/playwright/ddev-playwright';
+
+export default withDdev(defineConfig({ /* ... */ }));
+```
+
+```ts
+// in your tests
+import { test as base } from '@playwright/test';
+import { step, withWatch } from './.ddev/playwright/ddev-playwright';
+
+const test = withWatch(base);
+
+test('checkout', async ({ page }) => {
+  await step(test, page, 'Add to cart', async () => { /* ... */ });
+});
+```
+
+- `ddev playwright browser` paces actions, runs one worker, highlights each action and shows the test and step titles over the page.
+- `ddev playwright --record test` records video and trace for every test (see `ddev playwright show-report`).
+- Outside these modes the helper does nothing, so normal runs are unaffected.
+
 ### Multiple Playwright Installations
 
 If you have multiple Playwright installations in different directories, use the `--dir` flag to target a specific one per command without changing the persistent configuration:

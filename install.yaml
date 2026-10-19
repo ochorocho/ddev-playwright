@@ -3,5 +3,6 @@ name: playwright
 project_files:
   - docker-compose.playwright.yaml
   - commands/host/playwright
+  - playwright/ddev-playwright.ts
 
 ddev_version_constraint: '>= v1.24.3'

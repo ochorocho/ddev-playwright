@@ -233,6 +233,33 @@ use_subdir_fixture() {
   assert_output --partial "SLOWMO=50"
 }
 
+@test "--record produces video and trace" {
+  set -eu -o pipefail
+  run ddev add-on get "${DIR}"
+  assert_success
+  run ddev restart -y
+  assert_success
+  run ddev exec -s playwright npm install
+  assert_success
+
+  run ddev playwright --record test -g "watch helper"
+  assert_success
+  run find test-results -name video.webm
+  assert_output --partial "video.webm"
+  run find test-results -name trace.zip
+  assert_output --partial "trace.zip"
+}
+
+@test "help documents browser args and default pacing" {
+  set -eu -o pipefail
+  run ddev add-on get "${DIR}"
+  assert_success
+  run ddev playwright --help
+  assert_success
+  assert_output --partial "browser [file]"
+  assert_output --partial "250ms"
+}
+
 # bats test_tags=release
 @test "install from release" {
   set -eu -o pipefail
