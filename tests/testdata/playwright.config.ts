@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
+import { withDdev } from './.ddev/playwright/ddev-playwright';
 
-export default defineConfig({
+export default withDdev(defineConfig({
   testDir: './tests',
   timeout: 30_000,
   retries: 0,
@@ -9,7 +10,6 @@ export default defineConfig({
   use: {
     baseURL: 'http://web',
     trace: 'on-first-retry',
-    launchOptions: { slowMo: Number(process.env.PLAYWRIGHT_SLOWMO ?? 0) },
   },
   projects: [
     {
@@ -17,4 +17,4 @@ export default defineConfig({
       use: { browserName: 'chromium' },
     },
   ],
-});
+}));

@@ -22,6 +22,8 @@ fi
 ARGS=()
 CUSTOM_DIR=""
 SLOW_MO=""
+SLOW_MO_SET=0
+RECORD=0
 for arg in "$@"; do
     case "$arg" in
         --dir=*)
@@ -29,6 +31,10 @@ for arg in "$@"; do
             ;;
         --slow-mo=*)
             SLOW_MO="${arg#--slow-mo=}"
+            SLOW_MO_SET=1
+            ;;
+        --record)
+            RECORD=1
             ;;
         *)
             ARGS+=("$arg")
@@ -43,8 +49,15 @@ if [ -n "${SLOW_MO}" ] && ! [[ "${SLOW_MO}" =~ ^[0-9]+$ ]]; then
     echo -e "\033[0;31mError:\033[0m --slow-mo expects a non-negative integer (milliseconds), got '${SLOW_MO}'."
     exit 1
 fi
+# `browser` defaults to a followable pace unless --slow-mo is given
+if [ "${1:-}" = "browser" ] && [ "${SLOW_MO_SET}" -eq 0 ]; then
+    SLOW_MO=250
+fi
 # `ddev exec` has no -e flag, so set the variable via env(1) inside the container
 ENV_PREFIX=(env "PLAYWRIGHT_SLOWMO=${SLOW_MO}")
+# Read by .ddev/playwright/ddev-playwright.ts
+[ "${1:-}" = "browser" ] && ENV_PREFIX+=("PLAYWRIGHT_DDEV_WATCH=1")
+[ "${RECORD}" -eq 1 ] && ENV_PREFIX+=("PLAYWRIGHT_DDEV_RECORD=1")
 
 CMD="${1:-}"
 
@@ -108,6 +121,8 @@ cleanup_ui() {
 launch_ui_mode() {
     check_playwright_installed
 
+    # Extra args (file, -g, --project, ...) narrow what UI mode loads
+    local extra_args=("$@")
     local ui_port
     ui_port=$(get_ui_port)
 
@@ -127,7 +142,7 @@ launch_ui_mode() {
 
     # Run UI mode in the foreground — output suppressed (garbled escape sequences)
     # The trap above handles Ctrl+C since signal won't propagate through redirection
-    ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright "${ENV_PREFIX[@]}" npx playwright test --ui --ui-host=0.0.0.0 --ui-port=8077 > /dev/null 2>&1 &
+    ddev exec -d "${PLAYWRIGHT_WORK_DIR}" -s playwright "${ENV_PREFIX[@]}" npx playwright test --ui --ui-host=0.0.0.0 --ui-port=8077 ${extra_args[@]+"${extra_args[@]}"} > /dev/null 2>&1 &
     wait $!
 }
 
@@ -172,7 +187,7 @@ show_help() {
     echo ""
     echo -e "${BOLD}Usage:${NC}"
     echo "  ddev playwright test [options]         Run Playwright tests"
-    echo "  ddev playwright browser                Launch Playwright UI mode in your browser"
+    echo "  ddev playwright browser [file] [-g x]  Launch Playwright UI mode (paced at 250ms/action by default)"
     echo "  ddev playwright show-report            Open the last HTML test report"
     echo "  ddev playwright --version              Show Playwright version"
     echo "  ddev playwright install                Install browsers (usually not needed)"
@@ -181,6 +196,7 @@ show_help() {
     echo "  --dir=<path>    Override the Playwright working directory for this command."
     echo "                  Path is relative to the project root (e.g., --dir=test/E2E)."
     echo "  --slow-mo=<ms>  Slow down each Playwright operation (see Configuration below)."
+    echo "  --record        Record video and trace for every test (needs the watch helper)."
     echo ""
     echo -e "${BOLD}Examples:${NC}"
     echo "  ddev playwright test                             Run all tests headlessly"
@@ -192,11 +208,19 @@ show_help() {
     echo "  ddev playwright --dir=test/E2E test              Run tests from a different directory"
     echo "  ddev playwright test --slow-mo=500               Delay each action by 500ms"
     echo "  ddev playwright browser                          Start interactive UI mode"
+    echo "  ddev playwright browser tests/login.spec.ts      Follow a single spec in UI mode"
+    echo "  ddev playwright browser --slow-mo=0              UI mode at full speed"
     echo "  ddev playwright show-report                      View last test report"
     echo ""
     echo -e "${BOLD}Configuration:${NC}"
-    echo "  --slow-mo sets PLAYWRIGHT_SLOWMO in the container. Add to playwright.config.ts:"
+    echo "  Wrap your config with the watch helper (pacing, --record, highlighted actions):"
+    echo "    import { withDdev } from './.ddev/playwright/ddev-playwright';"
+    echo "    export default withDdev(defineConfig({ ... }));"
+    echo "  Without it, --slow-mo sets PLAYWRIGHT_SLOWMO; read it in playwright.config.ts:"
     echo "    use: { launchOptions: { slowMo: Number(process.env.PLAYWRIGHT_SLOWMO ?? 0) } }"
+    echo ""
+    echo "  Following a test: in UI mode select a test and press play; the action list and"
+    echo "  snapshot update live, hover the timeline to scrub through it afterwards."
     echo ""
     echo "  Set test directory (if Playwright is not in project root):"
     echo "    ddev dotenv set .ddev/.env.playwright --playwright-test-dir=\"test/Playwright\""
@@ -214,7 +238,8 @@ show_help() {
 
 case "${CMD}" in
     browser)
-        launch_ui_mode
+        shift
+        launch_ui_mode "$@"
         ;;
     show-report)
         show_report
